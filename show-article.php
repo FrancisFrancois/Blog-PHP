@@ -1,21 +1,18 @@
 <?php
-$filename = __DIR__ . '/data/articles.json';
-$articles = [];
+require_once __DIR__ . '/database/database.php';
+$authDB = require_once __DIR__ . '/database/security.php';
+$articleDB = require_once __DIR__ . '/database/models/ArticleDB.php';
+$currentUser = $authDB->isLoggedin();
+
 $_GET = filter_input_array(INPUT_GET, FILTER_SANITIZE_FULL_SPECIAL_CHARS);
 $id = $_GET['id'] ?? '';
 
 if (!$id) {
   header('Location: /');
 } else {
-  if (file_exists($filename)) {
-    $articles = json_decode(file_get_contents($filename), true) ?? [];
-    $articleIndex = array_search($id, array_column($articles, 'id'));
-    $article = $articles[$articleIndex];
-  }
+  $article = $articleDB->fetchOne($id);
 }
-
 ?>
-
 
 <!DOCTYPE html>
 <html lang="fr">
@@ -36,14 +33,18 @@ if (!$id) {
         <h1 class="article-title"><?= $article['title'] ?></h1>
         <div class="separator"></div>
         <p class="article-content"><?= $article['content'] ?></p>
-        <div class="form-actions">
-          <a class="btn btn-danger" href="/delete-article.php?id=<?= $article['id'] ?>">Supprimer l'article</a>
-          <a class="btn btn-primary" href="/form-article.php?id=<?= $article['id'] ?>">Editer l'article</a>
-        </div>
+        <p class="article-author"><?= $article['firstname'] . ' '. $article['lastname'] ?></p>
+        <?php if($currentUser && $currentUser['id'] === $article['author']) : ?>
+            <div class="form-actions">
+              <a class="btn btn-danger" href="/delete-article.php?id=<?= $article['id'] ?>">Supprimer</a>
+              <a class="btn btn-primary" href="/form-article.php?id=<?= $article['id'] ?>">Modifier l'article</a>
+            </div>
+        <?php endif; ?>
       </div>
     </div>
     <?php require_once 'includes/footer.php' ?>
   </div>
+
 </body>
 
 </html>

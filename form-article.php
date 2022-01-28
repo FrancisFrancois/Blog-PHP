@@ -1,26 +1,33 @@
 <?php
+require_once __DIR__ . '/database/database.php';
+$authDB = require_once __DIR__ . '/database/security.php';
+$currentUser = $authDB->isLoggedin();
+
+if (!$currentUser) {
+  header('Location: /');
+}
+
+$articleDB = require_once __DIR__ . '/database/models/ArticleDB.php';
 const ERROR_REQUIRED = 'Veuillez renseigner ce champ';
 const ERROR_TITLE_TOO_SHORT = 'Le titre est trop court';
 const ERROR_CONTENT_TOO_SHORT = 'L\'article est trop court';
 const ERROR_IMAGE_URL = 'L\'image doit être une url valide';
-$filename = __DIR__ . '/data/articles.json';
 $errors = [
   'title' => '',
   'image' => '',
   'category' => '',
-  'content' => '',
+  'content' => ''
 ];
 $category = '';
-
-if (file_exists($filename)) {
-  $articles = json_decode(file_get_contents($filename), true) ?? [];
-}
 
 $_GET = filter_input_array(INPUT_GET, FILTER_SANITIZE_FULL_SPECIAL_CHARS);
 $id = $_GET['id'] ?? '';
 if ($id) {
-  $articleIndex = array_search($id, array_column($articles, 'id'));
-  $article = $articles[$articleIndex];
+  $article = $articleDB->fetchOne($id);
+  if ($article['author'] !== $currentUser['id']) {
+      header('Location: /');
+  }
+  
   $title = $article['title'];
   $image = $article['image'];
   $category = $article['category'];
@@ -30,11 +37,11 @@ if ($id) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   $_POST = filter_input_array(INPUT_POST, [
-    'title' => FILTER_SANITIZE_STRING,
+    'title' => FILTER_SANITIZE_SPECIAL_CHARS,
     'image' => FILTER_SANITIZE_URL,
-    'category' => FILTER_SANITIZE_STRING,
+    'category' => FILTER_SANITIZE_SPECIAL_CHARS,
     'content' => [
-      'filter' => FILTER_SANITIZE_STRING,
+      'filter' => FILTER_SANITIZE_SPECIAL_CHARS,
       'flags' => FILTER_FLAG_NO_ENCODE_QUOTES
     ]
   ]);
@@ -42,6 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $image = $_POST['image'] ?? '';
   $category = $_POST['category'] ?? '';
   $content = $_POST['content'] ?? '';
+
 
   if (!$title) {
     $errors['title'] = ERROR_REQUIRED;
@@ -67,33 +75,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   if (empty(array_filter($errors, fn ($e) => $e !== ''))) {
     if ($id) {
-      $articles[$articleIndex]['title'] = $title;
-      $articles[$articleIndex]['image'] = $image;
-      $articles[$articleIndex]['category'] = $category;
-      $articles[$articleIndex]['content'] = $content;
+      $article['title'] = $title;
+      $article['image'] = $image;
+      $article['category'] = $category;
+      $article['content'] = $content;
+      $article['author'] = $currentUser['id'];
+      $articleDB->updateOne($article);
     } else {
-      $articles = [...$articles, [
+      $articleDB->createOne([
         'title' => $title,
-        'image' => $image,
-        'category' => $category,
         'content' => $content,
-        'id' => time()
-      ]];
+        'category' => $category,
+        'image' => $image,
+        'author' => $currentUser['id']
+      ]);
     }
-    file_put_contents($filename, json_encode($articles));
     header('Location: /');
   }
 }
 
 ?>
 
+
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 
 <head>
   <?php require_once 'includes/head.php' ?>
-  <link rel="stylesheet" href="/public/css/form-article.css">
-
   <title><?= $id ? 'Modifier' : 'Créer' ?> un article</title>
 </head>
 
@@ -103,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="content">
       <div class="block p-20 form-container">
         <h1><?= $id ? 'Modifier' : 'Écrire' ?> un article</h1>
-        <form action="/form-article.php<?= $id ? "?id=$id" : '' ?>" , method="post">
+        <form action="/form-article.php<?= $id ? "?id=$id" : '' ?>" , method="POST">
           <div class="form-control">
             <label for="title">Titre</label>
             <input type="text" name="title" id="title" value="<?= $title ?? '' ?>">
@@ -130,14 +138,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php endif; ?>
           </div>
           <div class="form-control">
-            <label for="content">Contenu</label>
+            <label for="content">Content</label>
             <textarea name="content" id="content"><?= $content ?? '' ?></textarea>
             <?php if ($errors['content']) : ?>
               <p class="text-danger"><?= $errors['content'] ?></p>
             <?php endif; ?>
           </div>
           <div class="form-actions">
-            <a href="/" class="btn btn-secondary" type="button">Annuler</a>
+            <a href="/" class="btn btn-danger" type="button">Annuler</a>
             <button class="btn btn-primary" type="submit"><?= $id ? 'Modifier' : 'Sauvegarder' ?></button>
           </div>
         </form>
